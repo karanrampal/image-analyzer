@@ -1,0 +1,13 @@
+project:
+  id: "hm-studios-metadata-c54a"
+  location: "europe-west1"
+
+agents:
+  analyzer:
+    model_name: "gemini-3.1-pro-preview"
+    location: "global"
+    max_output_tokens: 2048
+    temperature: 1.0
+    thinking_level: "low"
+    timeout: 60
+    max_retries: 3
