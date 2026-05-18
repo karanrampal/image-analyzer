@@ -1,0 +1,44 @@
+name: 'Deploy Infrastructure'
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform (apply/destroy)'
+        required: true
+        default: 'apply'
+        type: choice
+        options:
+          - 'apply'
+          - 'destroy'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy_infra:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+
+    environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+    env:
+      ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Deploy Infrastructure
+        uses: ./.github/actions/infra
+        with:
+          project_id: ${{ vars.PROJECT_ID }}
+          environment: ${{ env.ENVIRONMENT }}
+          region: 'europe-west1'
+          action: ${{ inputs.action }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: project-service-account@${{ vars.PROJECT_ID }}.iam.gserviceaccount.com

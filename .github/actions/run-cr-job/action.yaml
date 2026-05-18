@@ -1,0 +1,74 @@
+name: 'Run Cloud Run Job'
+
+description: 'Deploys and executes a Cloud Run job'
+
+inputs:
+  project_id:
+    description: 'GCP Project ID'
+    required: true
+  environment:
+    description: 'Environment (dev/prod)'
+    required: true
+  region:
+    description: 'GCP Region'
+    required: false
+    default: 'europe-west1'
+  image:
+    description: 'Full container image URI to run'
+    required: true
+  job_name:
+    description: 'Cloud Run job name'
+    required: false
+    default: 'annotate-images'
+  service_account:
+    description: 'GCP Service Account for the GitHub Actions runner'
+    required: true
+  workload_identity_provider:
+    description: 'GCP Workload Identity Provider'
+    required: true
+  cpu:
+    description: 'Number of CPUs allocated to the job'
+    required: false
+    default: '2'
+  memory:
+    description: 'Memory allocated to the job (e.g. 8Gi)'
+    required: false
+    default: '6Gi'
+  timeout:
+    description: 'Task timeout (e.g. 3600s)'
+    required: false
+    default: '86400s'
+  args:
+    description: 'Arguments to pass to the container command'
+    required: false
+    default: 'src/annotate.py'
+
+runs:
+  using: "composite"
+  steps:
+    - id: auth
+      name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v3
+      with:
+        token_format: access_token
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.service_account }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v3
+
+    - name: Deploy and execute Cloud Run job
+      shell: bash
+      run: |
+        gcloud run jobs deploy "${{ inputs.job_name }}" \
+          --image="${{ inputs.image }}" \
+          --region="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --cpu="${{ inputs.cpu }}" \
+          --memory="${{ inputs.memory }}" \
+          --task-timeout="${{ inputs.timeout }}" \
+          --service-account="cr-job-sa-${{ inputs.environment }}@${{ inputs.project_id }}.iam.gserviceaccount.com" \
+          --command=python \
+          --args="${{ inputs.args }}" \
+          --verbosity=warning \
+          --execute-now

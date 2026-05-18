@@ -1,0 +1,116 @@
+name: 'Terraform Infrastructure'
+
+description: 'Setup and run Terraform for infrastructure'
+
+inputs:
+  project_id:
+    description: 'GCP Project ID'
+    required: true
+  environment:
+    description: 'Environment (dev/prod)'
+    required: true
+  region:
+    description: 'GCP Region'
+    required: false
+    default: 'europe-west1'
+  action:
+    description: 'Terraform action (apply/destroy)'
+    required: false
+    default: 'apply'
+  workload_identity_provider:
+    description: 'GCP Workload Identity Provider'
+    required: true
+  service_account:
+    description: 'GCP Service Account'
+    required: true
+  terraform_version:
+    description: 'Terraform version'
+    required: false
+    default: '1.14.1'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v4
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+
+    - id: auth
+      name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v3
+      with:
+        token_format: access_token
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.service_account }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v3
+
+    - name: Configure Environment
+      shell: bash
+      env:
+        ACTION: ${{ inputs.action }}
+      run: |
+        echo "TF_STATE_BUCKET=tf-state-${{ inputs.project_id }}-${{ inputs.environment }}" >> $GITHUB_ENV
+        echo "TF_LOCK_TIMEOUT=10m" >> $GITHUB_ENV
+
+        if [[ "${ACTION}" == "destroy" ]]; then
+          echo "DESTROY_FLAG=-destroy" >> $GITHUB_ENV
+        else
+          echo "DESTROY_FLAG=" >> $GITHUB_ENV
+        fi
+
+    - name: Verify State Bucket
+      shell: bash
+      run: |
+        if ! gcloud storage buckets describe "gs://${TF_STATE_BUCKET}" --project="${{ inputs.project_id }}" &> /dev/null
+        then
+          echo "Creating Terraform state bucket gs://${TF_STATE_BUCKET}..."
+          gcloud storage buckets create "gs://${TF_STATE_BUCKET}" \
+            --project="${{ inputs.project_id }}" \
+            --location="${{ inputs.region }}" \
+            --uniform-bucket-level-access \
+            --public-access-prevention \
+            --verbosity=warning
+          echo "✓ State bucket created"
+        else
+          echo "✓ TF-state bucket gs://${TF_STATE_BUCKET} already exists"
+        fi
+
+    - name: Terraform Format
+      shell: bash
+      run: terraform -chdir=terraform fmt -check -recursive -diff
+
+    - name: Terraform Init
+      shell: bash
+      run: terraform -chdir=terraform init -backend-config="bucket=$TF_STATE_BUCKET"
+
+    - name: Terraform Validate
+      shell: bash
+      run: terraform -chdir=terraform validate
+
+    - name: Terraform Plan
+      shell: bash
+      run: |
+        terraform -chdir=terraform plan \
+          $DESTROY_FLAG \
+          -lock-timeout=$TF_LOCK_TIMEOUT \
+          -var-file="${{ inputs.environment }}.tfvars" \
+          -input=false \
+          -compact-warnings \
+          -out=plan.tfplan
+
+    - name: Terraform Apply / Destroy
+      shell: bash
+      run: |
+        terraform -chdir=terraform apply \
+          -lock-timeout=$TF_LOCK_TIMEOUT \
+          -input=false \
+          -compact-warnings \
+          plan.tfplan
+
+    - name: Terraform Output
+      shell: bash
+      if: inputs.action == 'apply'
+      run: terraform -chdir=terraform output

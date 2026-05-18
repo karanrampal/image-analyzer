@@ -1,0 +1,58 @@
+name: 'CI pipeline'
+
+on:
+  workflow_dispatch:
+  # pull_request:
+  #   types: [opened, synchronize, reopened]
+  #   paths:
+  #     - 'src/**'
+  #     - 'tests/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  run_tests:
+    name: Check formatting, typing, linting and run Tests
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: "read"
+    
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v6
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      
+      - name: Install dependencies
+        run: make install-all
+      
+      - name: Format and lint check with ruff
+        run: |
+          uv run ruff format --check
+          uv run ruff check
+      
+      - name: Check typings with mypy
+        run: make typecheck
+      
+      - name: Lint with pylint
+        run: make lint
+      
+      - name: Run tests
+        run: make test-all
+      
+      - name: Sonarqube
+        uses: hm-actions/run-sonarqube-scan@v2
+        with:
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          sonar-host-url: ${{ secrets.SONAR_HOST_URL }}

@@ -1,0 +1,32 @@
+{
+  "name": "image-analysis",
+
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/terraform:1": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "version": "latest", "helm": "latest", "minikube": "none"
+    },
+    "ghcr.io/devcontainers/features/node:1": {}
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "GitHub.copilot-chat",
+        "hashicorp.terraform",
+        "ms-azuretools.vscode-docker",
+        "docker.docker"
+      ]
+    }
+  },
+
+  "remoteEnv": { "UV_LINK_MODE": "copy" }
+}

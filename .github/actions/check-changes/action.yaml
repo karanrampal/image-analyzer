@@ -1,0 +1,39 @@
+name: 'Check Path Changes'
+
+description: 'Detects whether any files under a given directory have changed between commits'
+
+inputs:
+  path:
+    description: 'Directory to check for changes (e.g. terraform)'
+    required: true
+
+outputs:
+  changed:
+    description: "'true' if any files under the path changed, 'false' otherwise"
+    value: ${{ steps.check.outputs.changed }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check for changes in path
+      id: check
+      shell: bash
+      env:
+        CHECK_PATH: ${{ inputs.path }}
+        BEFORE_SHA: ${{ github.event.before }}
+        AFTER_SHA: ${{ github.sha }}
+      run: |
+        BEFORE="${BEFORE_SHA}"
+
+        # workflow_dispatch has no before SHA, and new branch pushes have all-zeros.
+        # In both cases default to changed=true - safer to deploy than to skip.
+        if [[ -z "${BEFORE}" || "${BEFORE}" == "0000000000000000000000000000000000000000" ]]; then
+          echo "changed=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        if git diff --name-only "${BEFORE}" "${AFTER_SHA}" | grep -q "^${CHECK_PATH}/"; then
+          echo "changed=true" >> $GITHUB_OUTPUT
+        else
+          echo "changed=false" >> $GITHUB_OUTPUT
+        fi
